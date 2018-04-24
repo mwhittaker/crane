@@ -20,6 +20,18 @@ def boxed(s):
     hashes = '#' * len(s)
     return '\n'.join([hashes, s, hashes])
 
+def pssh(hostfile, command):
+    template = ('parallel-ssh ' +
+                '-l {username} ' +
+                '-v ' +
+                '-p 3 ' +
+                '-i ' +
+                '-t 600 ' +
+                '-h {hostfile} ' +
+                '-x "-i $HOME/.ssh/aws-ec2.pem" ' +
+                '"{command}"')
+    return template.format(username=USER, hostfile=hostfile, command=command)
+
 def run_command(command, env=None):
     try:
         print(boxed('Running command "{}"'.format(command)))
@@ -39,37 +51,42 @@ def kill_previous_process(args):
     print(boxed("Killing residual processes."))
 
     # Heming: added %s-amd64-, this is for killing valgrind sub processes such as helgrind-amd64-.
-    cmd = 'sudo killall -9 mencoder worker-run.py server.out %s %s-amd64- %s-amd64- %s-amd64-' % (
+    cmd = 'sudo killall -9 mencoder worker-run.py server.out %s %s-amd64- %s-amd64- %s-amd64- || true' % (
             args.app, args.head, args.worker1, args.worker2)
-    rcmd = 'parallel-ssh -l {username} -v -p 3 -i -t 15 -h hostfile {command}'.format(
-            username=USER, command=cmd)
+    # rcmd = 'parallel-ssh -l {username} -v -p 3 -i -t 15 -h hostfile {command}'.format(
+    #         username=USER, command=cmd)
+    rcmd = pssh('hostfile', cmd)
     print(run_command(rcmd))
 
     print "Removing temporaries"
     cmd = 'sudo rm -rf /dev/shm/*'
-    rcmd = 'parallel-ssh -l {username} -v -p 3 -i -t 15 -h hostfile {command}'.format(
-            username=USER, command=cmd)
+    # rcmd = 'parallel-ssh -l {username} -v -p 3 -i -t 15 -h hostfile {command}'.format(
+    #         username=USER, command=cmd)
+    rcmd = pssh('hostfile', cmd)
     print(run_command(rcmd))
 
     # killall criu-cr.py via sudo
     # bug02 worker2
-    cmd = 'sudo killall -9 criu-cr.py &> /dev/null'
-    rcmd = 'parallel-ssh -l {username} -v -p 1 -i -t 15 -h worker2 {command}'.format(
-            username=USER, command=cmd)
+    cmd = 'sudo killall -9 criu-cr.py || true &> /dev/null'
+    # rcmd = 'parallel-ssh -l {username} -v -p 1 -i -t 15 -h worker2 {command}'.format(
+    #         username=USER, command=cmd)
+    rcmd = pssh('worker2', cmd)
     print(run_command(rcmd))
 
 def build_project(args):
     cmd = "~/worker-build.py -s %s --enable-lxc %s" % (args.msmr_root_server, args.enable_lxc)
     print(boxed("Building project on node: "))
 
-    rcmd = "parallel-ssh -l %s -v -p 1 -i -t 25 -h head \"%s\"" % (USER, cmd)
+    # rcmd = "parallel-ssh -l %s -v -p 1 -i -t 25 -h head \"%s\"" % (USER, cmd)
+    rcmd = pssh('head', cmd)
     # Start the head node first
     print(run_command(rcmd))
 
     for node_id in xrange(1, 3):
         wcmd = "~/worker-build.py -s %s --enable-lxc %s" % (args.msmr_root_server, args.enable_lxc)
-        rcmd_workers = "parallel-ssh -l %s -v -p 1 -i -t 25 -h worker%d \"%s\"" % (
-                USER, node_id, wcmd)
+        # rcmd_workers = "parallel-ssh -l %s -v -p 1 -i -t 25 -h worker%d \"%s\"" % (
+        #         USER, node_id, wcmd)
+        rcmd_workers = pssh('worker{}'.format(node_id), wcmd)
         # Start the secondary nodes one by one
         print(run_command(rcmd_workers))
 
@@ -81,7 +98,8 @@ def run_servers(args, start_proxy_only, start_server_only):
             start_proxy_only, start_server_only)
     print "replaying server master node command: "
 
-    rcmd = "parallel-ssh -l %s -v -p 1 -i -t 25 -h head \"%s\"" % (USER, cmd)
+    # rcmd = "parallel-ssh -l %s -v -p 1 -i -t 25 -h head \"%s\"" % (USER, cmd)
+    rcmd = pssh('head', cmd)
     # Start the head node first
     print(run_command(rcmd))
 
@@ -102,17 +120,19 @@ def run_servers(args, start_proxy_only, start_server_only):
                 args.app, args.xtern, args.proxy, args.checkpoint,
                 args.msmr_root_server, node_id, args.sp, args.sd, args.scmd, worker_tool, args.enable_lxc, args.dmt_log_output,
                 start_proxy_only, start_server_only)
-        rcmd_workers = "parallel-ssh -l %s -v -p 1 -i -t 25 -h worker%d \"%s\"" % (
-                USER, node_id, wcmd)
+        # rcmd_workers = "parallel-ssh -l %s -v -p 1 -i -t 25 -h worker%d \"%s\"" % (
+        #         USER, node_id, wcmd)
+        rcmd_workers = pssh('worker{}'.format(node_id), wcmd)
         print "Master: replaying master node command: "
         # Start the secondary nodes one by one
         print(run_command(rcmd_workers))
 
 def restart_head(args):
     #cmd = '"~/head-restart.py"'
-    cmd = 'sudo killall -9 server.out ' + args.app
-    rcmd_head = 'parallel-ssh -l {username} -v -p 1 -i -t 15 -h head {command}'.format(
-        username=USER, command=cmd)
+    cmd = 'sudo killall -9 server.out ' + args.app + ' || true'
+    # rcmd_head = 'parallel-ssh -l {username} -v -p 1 -i -t 15 -h head {command}'.format(
+    #     username=USER, command=cmd)
+    rcmd_head = pssh('head', cmd)
     print(run_command(rcmd_head))
 
     time.sleep(20)
@@ -123,7 +143,8 @@ def restart_head(args):
             args.app, args.xtern, args.proxy, args.checkpoint,
             args.msmr_root_server, args.sp, args.sd, args.scmd, args.enable_lxc)
     print "replaying server master node command: "
-    rcmd = "parallel-ssh -l %s -v -p 1 -i -t 25 -h head \"%s\"" % (USER, cmd)
+    # rcmd = "parallel-ssh -l %s -v -p 1 -i -t 25 -h head \"%s\"" % (USER, cmd)
+    rcmd = pssh('head', cmd)
     # Start the head node first
     print(run_command(rcmd))
 
@@ -133,7 +154,8 @@ def restart_head(args):
     cmd = "cd %s/eval-container && ./checkpoint-restore.sh restore %s checkpoint-*.tar.gz >| restore_output &" % (
             MSMR_ROOT, args.app)
     print "replaying server master node command: "
-    rcmd = "parallel-ssh -l %s -v -p 1 -i -t 600 -h head \"%s\"" % (USER, cmd)
+    # rcmd = "parallel-ssh -l %s -v -p 1 -i -t 600 -h head \"%s\"" % (USER, cmd)
+    rcmd = pssh('head', cmd)
     # Start the head node first
     print(run_command(rcmd))
 
@@ -173,20 +195,23 @@ def run_clients(args, newIP=False):
 def run_criu(args):
     # 1. Checkpoint the server process
     cmd = "sudo ~/su-checkpoint.sh %s" % (args.app)
-    rcmd = 'parallel-ssh -l {username} -v -p 3 -i -t 15 -h head {command}'.format(
-            username=USER, command=cmd)
+    # rcmd = 'parallel-ssh -l {username} -v -p 3 -i -t 15 -h head {command}'.format(
+    #         username=USER, command=cmd)
+    rcmd = pssh('head', cmd)
     print(run_command(rcmd))
 
     # 2. Kill both proxy and server on bug03
-    cmd = 'sudo killall -9 server.out %s' % (args.app)
-    rcmd = 'parallel-ssh -l {username} -v -p 3 -i -t 15 -h head {command}'.format(
-            username=USER, command=cmd)
+    cmd = 'sudo killall -9 server.out %s' % (args.app) + ' || true'
+    # rcmd = 'parallel-ssh -l {username} -v -p 3 -i -t 15 -h head {command}'.format(
+    #         username=USER, command=cmd)
+    rcmd = pssh('head', cmd)
     print(run_command(rcmd))
 
     # 3. Restore server process
     cmd = "sudo ~/su-restore.sh ~/%s-*" % (args.app)
-    rcmd = 'parallel-ssh -l {username} -v -p 3 -i -t 15 -h head {command}'.format(
-            username=USER, command=cmd)
+    # rcmd = 'parallel-ssh -l {username} -v -p 3 -i -t 15 -h head {command}'.format(
+    #         username=USER, command=cmd)
+    rcmd = pssh('head', cmd)
     print(run_command(rcmd))
 
     # 4. Restore proxy
@@ -194,8 +219,9 @@ def run_criu(args):
 def checkpoint_worker(args):
     print "deploying checkpoint..."
     cmd = "cd $MSMR_ROOT/eval-container; ./checkpoint.py " + args.app
-    rcmd = "parallel-ssh -l {username} -v -p 3 -i -t 10 -h worker1 \"{command}\"".format(
-            username=USER, command=cmd)
+    # rcmd = "parallel-ssh -l {username} -v -p 3 -i -t 10 -h worker1 \"{command}\"".format(
+    #         username=USER, command=cmd)
+    rcmd = pssh('worker1', cmd)
     print(run_command(rcmd))
 
 def main(args):

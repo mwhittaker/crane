@@ -11,8 +11,8 @@ dmt_log_output=0
 leader_elect=0                 # 1 enable leader election demo, 0 otherwise
 checkpoint=0                   # 1 use checkpoint on relicas, 0 otherwise
 checkpoint_period=10           # period of CRIU checkpoint, e.g. 10 seconds
-msmr_root_client="$MSMR_ROOT"  # root dir for m-smr
-msmr_root_server="$MSMR_ROOT"
+msmr_root_client="/home/ubuntu/crane"  # root dir for m-smr
+msmr_root_server="/home/ubuntu/crane"
 input_url="127.0.0.1"          # url for client to query
 analysis_tools=""              # for executing analysis tools
 num_req=1000
@@ -21,7 +21,7 @@ num_thd=8
 if [ $1"X" != "X" ]; then
   if [ $1"X" == "joint_schedX" ]; then
     use_joint_scheduling_plan;
-    enable_lxc="yes"; # Heming: enable_lxc is tested.
+    # enable_lxc="yes"; # Heming: enable_lxc is tested.
   elif [ $1"X" == "separate_schedX" ]; then
     use_separate_scheduling_plan;
   elif [ $1"X" == "xtern_onlyX" ]; then

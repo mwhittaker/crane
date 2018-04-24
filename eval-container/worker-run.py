@@ -19,33 +19,53 @@ CONTAINER_IP = "10.0.3.111"
 HOME = expanduser("~") # Assume the MSMR_ROOT path is the same in host OS as in lxc container.
 USER = os.environ["USER"]
 
+def boxed(s):
+    s = '# ' + s + ' #'
+    hashes = '#' * len(s)
+    return '\n'.join([hashes, s, hashes])
+
+def run_command(command, env=None):
+    try:
+        print(boxed('Running command "{}"'.format(command)))
+        if env:
+            output = subprocess.check_output(command, stderr=subprocess.STDOUT,
+                                             shell=True, env=env)
+        else:
+            output = subprocess.check_output(command, stderr=subprocess.STDOUT,
+                                             shell=True)
+    except subprocess.CalledProcessError as exc:
+        print(exc.output)
+        raise exc
+    else:
+        return output
+
 def set_local_config(args):
 
     cur_env = os.environ.copy()
     cur_env['MSMR_ROOT'] = MSMR_ROOT
     cur_env['XTERN_ROOT'] = XTERN_ROOT
-        
+
     if args.sd == 1 or args.sp == 1:
         assert args.proxy == 1 and args.xtern == 1, \
             "Joint scheduling need to be enabled with XTERN and libevent_paxos together!"
 
-    # Copy the libevent_paxos configuration file to the current folder 
+    # Copy the libevent_paxos configuration file to the current folder
     if not os.path.isfile('$MSMR_ROOT/eval-container/nodes.local.cfg'):
         tcmd = 'cp $MSMR_ROOT/libevent_paxos/target/nodes.local.cfg $MSMR_ROOT/eval-container/nodes.local.cfg'
-        proc =subprocess.Popen(tcmd, env=cur_env, shell=True, stdout=subprocess.PIPE)
+        print(run_command(tcmd, env=cur_env))
         time.sleep(1)
     print "Copy $MSMR_ROOT/eval-container/nodes.local.cfg to current folder"
     tcmd = 'cp $MSMR_ROOT/eval-container/nodes.local.cfg .'
-    proc =subprocess.Popen(tcmd, env=cur_env, shell=True, stdout=subprocess.PIPE)
+    print(run_command(tcmd, env=cur_env))
     time.sleep(1)
     os.system("sed -i -e 's/sched_with_dmt = [0-9]\+/sched_with_dmt = " + str(args.sd) + "/g' nodes.local.cfg")
     if args.enable_lxc == "yes":
         os.system("sed -i -e 's/127.0.0.1/" + CONTAINER_IP + "/g' nodes.local.cfg");
-    # Copy the xtern configuration file to the current folder 
+    # Copy the xtern configuration file to the current folder
     # Every time, copy the default.options.
     print "Copy default.options to current folder"
     tcmd = 'cp $XTERN_ROOT/default.options ~/local.options'
-    proc = subprocess.Popen(tcmd, env=cur_env, shell=True, stdout=subprocess.PIPE)
+    print(run_command(tcmd, env=cur_env))
     time.sleep(1)
     os.system("sed -i -e 's/sched_with_paxos = [0-9]\+/sched_with_paxos = " + str(args.sp) + "/g' local.options")
     os.system("sed -i -e 's/light_log_sync = [0-9]\+/light_log_sync = " + str(args.dmt_log_output) + "/g' local.options")
@@ -60,15 +80,13 @@ def execute_proxy(args):
 
     cur_env['CONFIG_FILE'] = 'nodes.local.cfg'
     cur_env['SERVER_PROGRAM'] = MSMR_ROOT + '/libevent_paxos/target/server.out'
-    
+
     cmd = 'ulimit -s 819200; ulimit -n 4096; ulimit -a > ulimit.txt; sudo rm -rf /dev/shm/* /tmp/mysql.sock; rm -rf ./.db ./log; mkdir ./log && \
            $SERVER_PROGRAM -n %d -r -m %s -c $CONFIG_FILE -l ./log 1> ./log/node_%d_stdout 2>./log/node_%d_stderr &' % (
            args.node_id, args.mode, args.node_id, args.node_id)
     print "Replaying Proxy cmd : " + cmd
 
-    p = subprocess.Popen(cmd, env=cur_env, shell=True, stdout=subprocess.PIPE)
-    output, err = p.communicate()
-    print output
+    print(run_command(cmd, env=cur_env))
 
 def execute_servers(args):
 
@@ -78,24 +96,18 @@ def execute_servers(args):
         # First, restart the container.
         print "Restarting the lxc container %s" %(CONTAINER)
         cmd = "sudo lxc-stop -n %s" % (CONTAINER)
-        p = subprocess.Popen(cmd, env=cur_env, shell=True, stdout=subprocess.PIPE)
-        output, err = p.communicate()
-        print output
+        print(run_command(cmd, env=cur_env))
+
         cmd = "sudo lxc-start -n %s" % (CONTAINER)
-        p = subprocess.Popen(cmd, env=cur_env, shell=True, stdout=subprocess.PIPE)
-        output, err = p.communicate()
-        print output
+        print(run_command(cmd, env=cur_env))
         time.sleep(10) # Heming: the lxc's daemon processes (e.g., sshd) need much time to bootstrap.
-    
+
         # Copy the local.options into lxc via /dev/shm (already setup the map).
         cmd = "cp local.options /dev/shm"
-        p = subprocess.Popen(cmd, env=cur_env, shell=True, stdout=subprocess.PIPE)
-        output, err = p.communicate()
-        print output
-        cmd = "sudo lxc-attach -n %s -- mv /dev/shm/local.options %s" % (CONTAINER, HOME) 
-        p = subprocess.Popen(cmd, env=cur_env, shell=True, stdout=subprocess.PIPE)
-        output, err = p.communicate()
-        print output
+        print(run_command(cmd, env=cur_env))
+
+        cmd = "sudo lxc-attach -n %s -- mv /dev/shm/local.options %s" % (CONTAINER, HOME)
+        print(run_command(cmd, env=cur_env))
 
     # Setup command and run.
     cmd = args.scmd
@@ -124,14 +136,10 @@ def execute_servers(args):
             USER, MSMR_ROOT, CONTAINER)
         psshcmd = psshcmd + "\"" + cmd + "\"";
         print "Replay real server command in lxc container:"
-        print psshcmd
-        p = subprocess.Popen(psshcmd, env=cur_env, shell=True, stdout=subprocess.PIPE)
-        output, err = p.communicate()
-        print output
+        print(run_command(psshcmd, env=cur_env))
     else:
         print "Replay real server command in host OS:"
-        print cmd
-        p = subprocess.Popen(cmd, env=cur_env, shell=True, stdout=subprocess.PIPE)
+        print(run_command(cmd, env=cur_env))
 
 
 def restart_proxy(args):
@@ -146,7 +154,7 @@ def restart_proxy(args):
     # We don't restart the server for now
     cmd = 'killall -9 server.out'
 
-    p = subprocess.Popen(cmd, env=cur_env, shell=True, stdout=subprocess.PIPE)
+    print(run_command(cmd, env=cur_env))
 
 def main(args):
     """
@@ -161,7 +169,7 @@ def main(args):
         if args.start_server_only == "no":
             execute_proxy(args)
     time.sleep(2)
-    if args.start_proxy_only == "no": 
+    if args.start_proxy_only == "no":
         execute_servers(args)
     # Wait a while fot the real server to set up
     time.sleep(8)
@@ -192,7 +200,7 @@ if __name__ == "__main__":
             help="Schedule with DMT.")
     parser.add_argument('--scmd', type=str, dest="scmd", action="store",
             help="The command to execute the real server.")
-    parser.add_argument('--tool', type=str, dest="analysis_tool", 
+    parser.add_argument('--tool', type=str, dest="analysis_tool",
             action="store", default="none", help="The tool to run with xtern on the server.")
     parser.add_argument('--start_proxy_only', type=str, dest="start_proxy_only",
             action="store", default="no", help="Start proxy only.")
@@ -205,7 +213,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     # Checking missing arguments
-    
+
     main_start_time = time.time()
 
     MSMR_ROOT = args.msmr_root_server
