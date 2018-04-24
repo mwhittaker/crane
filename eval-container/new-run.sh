@@ -33,20 +33,20 @@ if [ $2"X" != "X" ]; then
 	fi
 fi
 
-if [ $build_project == "true" ]; then
-  # Update worker-build.py to the server
-  scp worker-build.py bug03.cs.columbia.edu:~/
-  scp worker-build.py bug01.cs.columbia.edu:~/
-  scp worker-build.py bug02.cs.columbia.edu:~/
-fi
-
-# Update worker-run.py to the server
-scp worker-run.py bug03.cs.columbia.edu:~/
-scp worker-run.py bug01.cs.columbia.edu:~/
-scp worker-run.py bug02.cs.columbia.edu:~/
-
-# Update criu-cr.py to the bug02 (a.k.a. Node 2)
-scp criu-cr.py bug02.cs.columbia.edu:~/
+# if [ $build_project == "true" ]; then
+#   # Update worker-build.py to the server
+#   scp worker-build.py bug03.cs.columbia.edu:~/
+#   scp worker-build.py bug01.cs.columbia.edu:~/
+#   scp worker-build.py bug02.cs.columbia.edu:~/
+# fi
+#
+# # Update worker-run.py to the server
+# scp worker-run.py bug03.cs.columbia.edu:~/
+# scp worker-run.py bug01.cs.columbia.edu:~/
+# scp worker-run.py bug02.cs.columbia.edu:~/
+#
+# # Update criu-cr.py to the bug02 (a.k.a. Node 2)
+# scp criu-cr.py bug02.cs.columbia.edu:~/
 
 echo "running $app with config $3 for $4 rounds..."
 for i in `seq 1 $4`; do
